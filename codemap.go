@@ -1,6 +1,9 @@
-package keylogger
+package goinput
 
-// keyCodeMap connects the code with human readable key
+import (
+	"strconv"
+)
+
 var keyCodeMap = map[uint16]string{
 	1:   "ESC",
 	2:   "1",
@@ -121,4 +124,27 @@ var keyCodeMap = map[uint16]string{
 	117: "",
 	118: "",
 	119: "Pause",
+}
+
+var mouseCodeMap = map[uint16]string{
+	11: "Scroll",
+	272: "Mouse_Left",
+	273: "Mouse_Right",
+	274: "Mouse_Middle",
+}
+
+const (
+	mouseLeft = iota + 1
+	mouseMiddle
+	mouseRight
+	mouseWheelUp
+	mouseWheelDown
+)
+
+var xdotoolMap = map[string]string {
+	"LEFT": strconv.Itoa(mouseLeft),
+	"RIGHT": strconv.Itoa(mouseRight),
+	"MIDDLE": strconv.Itoa(mouseMiddle),
+	"WHEELUP": strconv.Itoa(mouseWheelUp),
+	"WHEELDOWN": strconv.Itoa(mouseWheelDown),
 }

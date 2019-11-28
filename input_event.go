@@ -1,4 +1,4 @@
-package keylogger
+package goinput
 
 import (
 	"syscall"
@@ -50,7 +50,7 @@ type InputEvent struct {
 
 // KeyString returns representation of pressed key as string
 // eg enter, space, a, b, c...
-func (i *InputEvent) KeyString() string {
+func (i *InputEvent) String() string {
 	return keyCodeMap[i.Code]
 }
 
@@ -62,4 +62,32 @@ func (i *InputEvent) KeyPress() bool {
 // KeyRelease is the value when we release the key on keyboard
 func (i *InputEvent) KeyRelease() bool {
 	return i.Value == 0
+}
+
+type Button struct {
+	code int
+	Name string
+}
+
+type MouseClick struct {
+	Button
+	Press bool
+}
+
+type MouseMove struct {
+	X int
+	Y int
+}
+
+type MouseScroll struct {
+	Dx int
+	Dy int
+}
+
+type KeyPress struct {
+	Key uint16
+}
+
+type KeyRelease struct {
+	key uint16
 }

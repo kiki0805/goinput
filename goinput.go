@@ -1,3 +1,70 @@
+// Package goinput Capture mouse and keyboard events or control them on Linux.
+// Highly dependent on xdotool.
+/* 
+	package main
+
+	import (
+		"fmt"
+		"github.com/kiki0805/goinput"
+		"time"
+	)
+
+	func main() {
+		fmt.Println("Testing listener...")
+		mouse := goinput.NewMouse()
+		mouse.Listen()
+		keyboard := goinput.NewKeyboard()
+		keyboard.Listen()
+		go func() {
+			for mouseMove := range mouse.OnMove {
+				fmt.Println("mouse move", mouseMove.X, mouseMove.Y)
+			}
+		}()
+		go func() {
+			for mouseClick := range mouse.OnClick {
+				fmt.Println("mouse click", mouseClick.Button.Name, mouseClick.Press)
+			}
+		}()
+		go func() {
+			for mouseScroll := range mouse.OnScroll {
+				fmt.Println("mouse scroll", mouseScroll.Dx, mouseScroll.Dy)
+			}
+		}()
+		go func() {
+			for keyPress := range keyboard.OnPress {
+				fmt.Println("keyboard press", keyPress.Name)
+			}
+		}()
+		go func() {
+			for keyRelease := range keyboard.OnRelease {
+				fmt.Println("keyboard release", keyRelease.Name)
+			}
+		}()
+		<-time.After(5 * time.Second)
+		mouse.StopListen()
+		keyboard.StopListen()
+		fmt.Println("Stopped listener")
+
+		fmt.Println("Testing controller...")
+		for i := 0; i <= 800; i += 100 {
+			mouse.Move(i, i)
+			<-time.After(1 * time.Second)
+		}
+
+		toType := "Hello World!"
+		for i := 0; i < len(toType); i++ {
+			str := string(toType[i])
+			if str == " " {
+				str = "space"
+			} else if str == "!" {
+				str = "shift+1"
+			}
+			keyboard.Downup(str)
+		}
+		keyboard.Downup("Return")
+		fmt.Println("Finished")
+	} 
+*/
 package goinput
 
 import (
@@ -10,35 +77,37 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	// "sync"
 
 	"github.com/sirupsen/logrus"
 )
 
 var deviceNumMax int = 5
 
+// Mouse with captured event channel.
 type Mouse struct {
-	entries []deviceEntry
+	entries  []deviceEntry
 	termSign chan bool
-	OnMove chan MouseMove
-	OnClick chan MouseClick
+	OnMove   chan MouseMove
+	OnClick  chan MouseClick
 	OnScroll chan MouseScroll
 }
 
+// Keyboard with captured event channel.
 type Keyboard struct {
-	entries []deviceEntry
-	termSign chan bool
-	OnPress chan KeyPress
+	entries   []deviceEntry
+	termSign  chan bool
+	OnPress   chan KeyPress
 	OnRelease chan KeyRelease
 }
 
 type deviceEntry struct {
-	fd *os.File
-	event *chan InputEvent
+	fd    *os.File
+	event *chan inputEvent
 }
 
-// NewMouse return a mouse pointer
+// NewMouse return a mouse pointer.
 func NewMouse() *Mouse {
+	checkCmdExist("xdotool")
 	mouse := new(Mouse)
 	devicePath := findDevice("mouse", "touchpad", "trackpoint")
 	for _, path := range devicePath {
@@ -51,8 +120,9 @@ func NewMouse() *Mouse {
 	return mouse
 }
 
-// NewKeyboard return a keyboard pointer
+// NewKeyboard return a keyboard pointer.
 func NewKeyboard() *Keyboard {
+	checkCmdExist("xdotool")
 	keyboard := new(Keyboard)
 	devicePath := findDevice("keyboard")
 	for _, path := range devicePath {
@@ -65,7 +135,7 @@ func NewKeyboard() *Keyboard {
 	return keyboard
 }
 
-// New creates a new keylogger for a device path
+// New creates a new keylogger for a device path.
 func newDevice(devPath string) (*deviceEntry, error) {
 	dev := &deviceEntry{}
 	if !isRoot() {
@@ -89,7 +159,7 @@ func findDevice(deviceName ...string) []string {
 		for _, name := range names {
 			if name == "mouse" {
 				if strings.Contains(strings.ToLower(string(buff)), name) &&
-						!strings.Contains(strings.ToLower(string(buff)), "keyboard") {
+					!strings.Contains(strings.ToLower(string(buff)), "keyboard") {
 					devicePath = append(devicePath, fmt.Sprintf(resolved, i))
 				}
 				continue
@@ -106,7 +176,7 @@ func isRoot() bool {
 	return syscall.Getuid() == 0 && syscall.Geteuid() == 0
 }
 
-// Listen enables mouse OnMove/OnScroll/OnClick channels
+// Listen enables mouse OnMove/OnScroll/OnClick channels.
 func (mouse *Mouse) Listen() {
 	var num int
 	mouse.OnMove = make(chan MouseMove, 10)
@@ -117,22 +187,22 @@ func (mouse *Mouse) Listen() {
 	}
 	mouse.termSign = make(chan bool, num)
 	for _, entry := range mouse.entries[0:num] {
-		go func (entry deviceEntry, mouse *Mouse) {
+		go func(entry deviceEntry, mouse *Mouse) {
 			events := entry.Read()
-			L:
+		L:
 			for {
 				select {
-				case <- mouse.termSign:
+				case <-mouse.termSign:
 					break L
 				default:
 				}
 				select {
-				case <- mouse.termSign:
+				case <-mouse.termSign:
 					break L
-				case e := <- events:
+				case e := <-events:
 					press := e.KeyPress()
 					if e.Code == 0 || e.Code == 1 {
-						loc := mouse.Getmouselocation()
+						loc := mouse.Getlocation()
 						select {
 						case mouse.OnMove <- MouseMove{loc[0], loc[1]}:
 						default:
@@ -161,12 +231,11 @@ func (mouse *Mouse) Listen() {
 					}
 				}
 			}
-			fmt.Println("stop mouse")
 		}(entry, mouse)
 	}
 }
 
-// StopListen closes mouse channels
+// StopListen closes mouse channels.
 func (mouse *Mouse) StopListen() {
 	var num int
 	if num = deviceNumMax; num > len(mouse.entries) {
@@ -175,13 +244,13 @@ func (mouse *Mouse) StopListen() {
 	for i := 0; i < num; i++ {
 		mouse.termSign <- true
 	}
-	<- time.After(1 * time.Second)
+	<-time.After(1 * time.Second)
 	close(mouse.OnMove)
 	close(mouse.OnScroll)
 	close(mouse.OnClick)
 }
 
-// Listen enables keyboard OnRelease/OnPress channels
+// Listen enables keyboard OnRelease/OnPress channels.
 func (keyboard *Keyboard) Listen() {
 	var num int
 	keyboard.OnPress = make(chan KeyPress, 10)
@@ -191,21 +260,21 @@ func (keyboard *Keyboard) Listen() {
 	}
 	keyboard.termSign = make(chan bool, num)
 	for _, entry := range keyboard.entries[0:num] {
-		go func (entry deviceEntry, keyboard *Keyboard) {
+		go func(entry deviceEntry, keyboard *Keyboard) {
 			var press bool
 			events := entry.Read()
 			entry.event = &events
-			L:
+		L:
 			for {
 				select {
-				case <- keyboard.termSign:
+				case <-keyboard.termSign:
 					break L
 				default:
 				}
 				select {
-				case <- keyboard.termSign:
+				case <-keyboard.termSign:
 					break L
-				case e := <- events:
+				case e := <-events:
 					if e.String() == "" {
 						continue
 					}
@@ -222,12 +291,11 @@ func (keyboard *Keyboard) Listen() {
 					}
 				}
 			}
-			fmt.Println("stop keyboard")
 		}(entry, keyboard)
 	}
 }
 
-// StopListen closes keyboard channels
+// StopListen closes keyboard channels.
 func (keyboard *Keyboard) StopListen() {
 	var num int
 	if num = deviceNumMax; num > len(keyboard.entries) {
@@ -239,7 +307,7 @@ func (keyboard *Keyboard) StopListen() {
 	for i := 0; i < num; i++ {
 		keyboard.termSign <- true
 	}
-	<- time.After(2 * time.Second)
+	<-time.After(2 * time.Second)
 	close(keyboard.OnPress)
 	close(keyboard.OnRelease)
 }
@@ -247,9 +315,9 @@ func (keyboard *Keyboard) StopListen() {
 // Read from file descriptor
 // Blocking call, returns channel
 // Make sure to close channel when finish
-func (dev *deviceEntry) Read() chan InputEvent {
-	event := make(chan InputEvent)
-	go func(event chan InputEvent) {
+func (dev *deviceEntry) Read() chan inputEvent {
+	event := make(chan inputEvent)
+	go func(event chan inputEvent) {
 		for {
 			e, err := dev.read()
 			if err != nil {
@@ -267,7 +335,7 @@ func (dev *deviceEntry) Read() chan InputEvent {
 }
 
 // read from file description and parse binary into go struct
-func (dev *deviceEntry) read() (*InputEvent, error) {
+func (dev *deviceEntry) read() (*inputEvent, error) {
 	buffer := make([]byte, eventsize)
 	n, err := dev.fd.Read(buffer)
 	if err != nil {
@@ -280,9 +348,9 @@ func (dev *deviceEntry) read() (*InputEvent, error) {
 	return dev.eventFromBuffer(buffer)
 }
 
-// eventFromBuffer parser bytes into InputEvent struct
-func (dev *deviceEntry) eventFromBuffer(buffer []byte) (*InputEvent, error) {
-	event := &InputEvent{}
+// eventFromBuffer parser bytes into inputEvent struct
+func (dev *deviceEntry) eventFromBuffer(buffer []byte) (*inputEvent, error) {
+	event := &inputEvent{}
 	err := binary.Read(bytes.NewBuffer(buffer), binary.LittleEndian, event)
 	return event, err
 }

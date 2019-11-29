@@ -15,8 +15,8 @@ func checkCmdExist(cmd string) {
 
 // Although the commands can be used without receiver, I assign them to Mouse/Keyboard.
 
-// Getmouselocation get mouse current location
-func (*Mouse) Getmouselocation() [2]int {
+// Getlocation get mouse current location.
+func (*Mouse) Getlocation() [2]int {
 	output, err := exec.Command("xdotool", "getmouselocation").Output()
 	if err != nil {
 		panic(err)
@@ -30,35 +30,43 @@ func (*Mouse) Getmouselocation() [2]int {
 	return [2]int{wI, hI}
 }
 
-// Mousemove move mouse to location x, y
-func (*Mouse) Mousemove(x, y int) {
+// Move move mouse to location x, y.
+func (*Mouse) Move(x, y int) {
 	exec.Command("xdotool", "mousemove", strconv.Itoa(x), strconv.Itoa(y)).Run()
 }
 
-// Keyup Release key on keyboard
-func (*Keyboard) Keyup(key string) {
+// Downup Press and release key on keyboard.
+// Check https://www.linux.org/threads/xdotool-keyboard.10528/ for supported keysequence.
+func (*Keyboard) Downup(key string) {
+	exec.Command("xdotool", "key", key).Run()
+}
+
+// Up Release key on keyboard.
+// Check https://www.linux.org/threads/xdotool-keyboard.10528/ for supported keysequence.
+func (*Keyboard) Up(key string) {
 	exec.Command("xdotool", "keyup", key).Run()
 }
 
-// Keydown Press key on keyboard
-func (*Keyboard) Keydown(key string) {
+// Down Press key on keyboard.
+// Check https://www.linux.org/threads/xdotool-keyboard.10528/ for supported keysequence.
+func (*Keyboard) Down(key string) {
 	exec.Command("xdotool", "keydown", key).Run()
 }
 
-// Mouseclick Click middle/right/left button
-func (*Mouse) Mouseclick(key string) {
-	code := xdotoolMap[strings.ToUpper(key)]
+// Click Click middle/right/left button.
+func (*Mouse) Click(key string) {
+	code := xdotoolMouseMap[strings.ToUpper(key)]
 	exec.Command("xdotool", "click", code)
 }
 
-// Mouseup Release middle/right/left button
-func (*Mouse) Mouseup(key string) {
-	code := xdotoolMap[strings.ToUpper(key)]
+// Up Release middle/right/left button.
+func (*Mouse) Up(key string) {
+	code := xdotoolMouseMap[strings.ToUpper(key)]
 	exec.Command("xdotool", "mouseup", code)
 }
 
-// Mousedown Press middle/right/left button
-func (*Mouse) Mousedown(key string) {
-	code := xdotoolMap[strings.ToUpper(key)]
+// Down Press middle/right/left button.
+func (*Mouse) Down(key string) {
+	code := xdotoolMouseMap[strings.ToUpper(key)]
 	exec.Command("xdotool", "mousedown", code)
 }

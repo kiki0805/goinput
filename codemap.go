@@ -141,7 +141,7 @@ const (
 	mouseWheelDown
 )
 
-var xdotoolMap = map[string]string {
+var xdotoolMouseMap = map[string]string {
 	"LEFT": strconv.Itoa(mouseLeft),
 	"RIGHT": strconv.Itoa(mouseRight),
 	"MIDDLE": strconv.Itoa(mouseMiddle),

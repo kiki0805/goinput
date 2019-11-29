@@ -13,7 +13,10 @@ func checkCmdExist(cmd string) {
 	}
 }
 
-func Getmouselocation() [2]int {
+// Although the commands can be used without receiver, I assign them to Mouse/Keyboard.
+
+// Getmouselocation get mouse current location
+func (*Mouse) Getmouselocation() [2]int {
 	output, err := exec.Command("xdotool", "getmouselocation").Output()
 	if err != nil {
 		panic(err)
@@ -27,29 +30,35 @@ func Getmouselocation() [2]int {
 	return [2]int{wI, hI}
 }
 
-func Mousemove(x, y int) {
+// Mousemove move mouse to location x, y
+func (*Mouse) Mousemove(x, y int) {
 	exec.Command("xdotool", "mousemove", strconv.Itoa(x), strconv.Itoa(y)).Run()
 }
 
-func Keyup(key string) {
+// Keyup Release key on keyboard
+func (*Keyboard) Keyup(key string) {
 	exec.Command("xdotool", "keyup", key).Run()
 }
 
-func Keydown(key string) {
+// Keydown Press key on keyboard
+func (*Keyboard) Keydown(key string) {
 	exec.Command("xdotool", "keydown", key).Run()
 }
 
-func Mouseclick(key string) {
+// Mouseclick Click middle/right/left button
+func (*Mouse) Mouseclick(key string) {
 	code := xdotoolMap[strings.ToUpper(key)]
 	exec.Command("xdotool", "click", code)
 }
 
-func Mouseup(key string) {
+// Mouseup Release middle/right/left button
+func (*Mouse) Mouseup(key string) {
 	code := xdotoolMap[strings.ToUpper(key)]
 	exec.Command("xdotool", "mouseup", code)
 }
 
-func Mousedown(key string) {
+// Mousedown Press middle/right/left button
+func (*Mouse) Mousedown(key string) {
 	code := xdotoolMap[strings.ToUpper(key)]
 	exec.Command("xdotool", "mousedown", code)
 }

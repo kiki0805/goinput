@@ -9,15 +9,17 @@ import (
 	"os"
 	"strings"
 	"syscall"
+	"time"
 	// "sync"
 
 	"github.com/sirupsen/logrus"
 )
 
-var deviceNumMax int = 3
+var deviceNumMax int = 5
 
 type Mouse struct {
 	entries []deviceEntry
+	termSign chan bool
 	OnMove chan MouseMove
 	OnClick chan MouseClick
 	OnScroll chan MouseScroll
@@ -25,6 +27,7 @@ type Mouse struct {
 
 type Keyboard struct {
 	entries []deviceEntry
+	termSign chan bool
 	OnPress chan KeyPress
 	OnRelease chan KeyRelease
 }
@@ -33,11 +36,9 @@ type deviceEntry struct {
 	fd *os.File
 }
 
+// NewMouse return a mouse pointer
 func NewMouse() *Mouse {
 	mouse := new(Mouse)
-	mouse.OnMove = make(chan MouseMove, 10)
-	mouse.OnScroll = make(chan MouseScroll, 10)
-	mouse.OnClick = make(chan MouseClick, 10)
 	devicePath := findDevice("mouse", "touchpad", "trackpoint")
 	for _, path := range devicePath {
 		if strings.TrimSpace(path) == "" {
@@ -46,10 +47,10 @@ func NewMouse() *Mouse {
 		devEntry, _ := newDevice(path)
 		mouse.entries = append(mouse.entries, *devEntry)
 	}
-	fmt.Println(mouse.entries)
 	return mouse
 }
 
+// NewKeyboard return a keyboard pointer
 func NewKeyboard() *Keyboard {
 	keyboard := new(Keyboard)
 	devicePath := findDevice("keyboard")
@@ -104,35 +105,99 @@ func isRoot() bool {
 	return syscall.Getuid() == 0 && syscall.Geteuid() == 0
 }
 
-func (mouse *Mouse) Read() {
-	// var waitgroup sync.WaitGroup
+// Listen enables mouse OnMove/OnScroll/OnClick channels
+func (mouse *Mouse) Listen() {
+	var num int
+	mouse.OnMove = make(chan MouseMove, 10)
+	mouse.OnScroll = make(chan MouseScroll, 10)
+	mouse.OnClick = make(chan MouseClick, 10)
+	if num = deviceNumMax; num > len(mouse.entries) {
+		num = len(mouse.entries)
+	}
+	mouse.termSign = make(chan bool, num)
+	for _, entry := range mouse.entries[0:num] {
+		go func (entry deviceEntry, mouse *Mouse) {
+			events := entry.Read()
+			for {
+				select {
+				case <- mouse.termSign:
+					return
+				case e := <- events:
+					press := e.KeyPress()
+					if e.Code == 0 || e.Code == 1 {
+						loc := mouse.Getmouselocation()
+						mouse.OnMove <- MouseMove{loc[0], loc[1]}
+					} else if e.Code == 11 {
+						dy := e.Value
+						mouse.OnScroll <- MouseScroll{0, int(dy)}
+					} else if e.Code == 272 {
+						mouse.OnClick <- MouseClick{Button{mouseLeft, "LEFT"}, press}
+					} else if e.Code == 273 {
+						mouse.OnClick <- MouseClick{Button{mouseRight, "RIGHT"}, press}
+					} else if e.Code == 274 {
+						mouse.OnClick <- MouseClick{Button{mouseMiddle, "MIDDLE"}, press}
+					}
+				}
+			}
+		}(entry, mouse)
+	}
+}
+
+// StopListen closes mouse channels
+func (mouse *Mouse) StopListen() {
 	var num int
 	if num = deviceNumMax; num > len(mouse.entries) {
 		num = len(mouse.entries)
 	}
-	for _, entry := range mouse.entries[0:num] {
-		// waitgroup.Add(1)
-		go func (entry deviceEntry, mouse *Mouse) {
-			for e := range entry.Read() {
-				press := e.KeyPress()
-				if e.Code == 0 || e.Code == 1 {
-					loc := Getmouselocation()
-					mouse.OnMove <- MouseMove{loc[0], loc[1]}
-				} else if e.Code == 11 {
-					dy := e.Value
-					mouse.OnScroll <- MouseScroll{0, int(dy)}
-				} else if e.Code == 272 {
-					mouse.OnClick <- MouseClick{Button{mouseLeft, "LEFT"}, press}
-				} else if e.Code == 273 {
-					mouse.OnClick <- MouseClick{Button{mouseRight, "RIGHT"}, press}
-				} else if e.Code == 274 {
-					mouse.OnClick <- MouseClick{Button{mouseMiddle, "MIDDLE"}, press}
+	for i := 0; i < num; i++ {
+		mouse.termSign <- true
+	}
+	<- time.After(1 * time.Second)
+	close(mouse.OnMove)
+	close(mouse.OnScroll)
+	close(mouse.OnClick)
+}
+
+// Listen enables keyboard OnRelease/OnPress channels
+func (keyboard *Keyboard) Listen() {
+	var num int
+	keyboard.OnPress = make(chan KeyPress, 10)
+	keyboard.OnRelease = make(chan KeyRelease, 10)
+	if num = deviceNumMax; num > len(keyboard.entries) {
+		num = len(keyboard.entries)
+	}
+	for _, entry := range keyboard.entries[0:num] {
+		go func (entry deviceEntry, keyboard *Keyboard) {
+			var press bool
+			events := entry.Read()
+			for {
+				select {
+				case <- keyboard.termSign:
+					return
+				case e := <- events:
+					if press = e.KeyPress(); press {
+						keyboard.OnPress <- KeyPress{Key{e.Code, e.String()}}
+					} else {
+						keyboard.OnRelease <- KeyRelease{Key{e.Code, e.String()}}
+					}
 				}
 			}
-			// waitgroup.Done()
-		}(entry, mouse)
+		}(entry, keyboard)
 	}
-	// waitgroup.Wait()
+}
+
+// StopListen closes keyboard channels
+func (keyboard *Keyboard) StopListen() {
+	var num int
+	if num = deviceNumMax; num > len(keyboard.entries) {
+		num = len(keyboard.entries)
+	}
+	for i := 0; i < num; i++ {
+		keyboard.termSign <- true
+	}
+	<- time.After(1 * time.Second)
+	close(keyboard.OnPress)
+	close(keyboard.OnRelease)
 }
 
 // Read from file descriptor

@@ -69,6 +69,11 @@ type Button struct {
 	Name string
 }
 
+type Key struct {
+	code uint16
+	Name string
+}
+
 type MouseClick struct {
 	Button
 	Press bool
@@ -85,9 +90,9 @@ type MouseScroll struct {
 }
 
 type KeyPress struct {
-	Key uint16
+	Key
 }
 
 type KeyRelease struct {
-	key uint16
+	Key
 }

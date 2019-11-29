@@ -34,6 +34,7 @@ type Keyboard struct {
 
 type deviceEntry struct {
 	fd *os.File
+	event *chan InputEvent
 }
 
 // NewMouse return a mouse pointer
@@ -118,27 +119,49 @@ func (mouse *Mouse) Listen() {
 	for _, entry := range mouse.entries[0:num] {
 		go func (entry deviceEntry, mouse *Mouse) {
 			events := entry.Read()
+			L:
 			for {
 				select {
 				case <- mouse.termSign:
-					return
+					break L
+				default:
+				}
+				select {
+				case <- mouse.termSign:
+					break L
 				case e := <- events:
 					press := e.KeyPress()
 					if e.Code == 0 || e.Code == 1 {
 						loc := mouse.Getmouselocation()
-						mouse.OnMove <- MouseMove{loc[0], loc[1]}
+						select {
+						case mouse.OnMove <- MouseMove{loc[0], loc[1]}:
+						default:
+						}
 					} else if e.Code == 11 {
 						dy := e.Value
-						mouse.OnScroll <- MouseScroll{0, int(dy)}
+						select {
+						case mouse.OnScroll <- MouseScroll{0, int(dy)}:
+						default:
+						}
 					} else if e.Code == 272 {
-						mouse.OnClick <- MouseClick{Button{mouseLeft, "LEFT"}, press}
+						select {
+						case mouse.OnClick <- MouseClick{Button{mouseLeft, "LEFT"}, press}:
+						default:
+						}
 					} else if e.Code == 273 {
-						mouse.OnClick <- MouseClick{Button{mouseRight, "RIGHT"}, press}
+						select {
+						case mouse.OnClick <- MouseClick{Button{mouseRight, "RIGHT"}, press}:
+						default:
+						}
 					} else if e.Code == 274 {
-						mouse.OnClick <- MouseClick{Button{mouseMiddle, "MIDDLE"}, press}
+						select {
+						case mouse.OnClick <- MouseClick{Button{mouseMiddle, "MIDDLE"}, press}:
+						default:
+						}
 					}
 				}
 			}
+			fmt.Println("stop mouse")
 		}(entry, mouse)
 	}
 }
@@ -166,22 +189,40 @@ func (keyboard *Keyboard) Listen() {
 	if num = deviceNumMax; num > len(keyboard.entries) {
 		num = len(keyboard.entries)
 	}
+	keyboard.termSign = make(chan bool, num)
 	for _, entry := range keyboard.entries[0:num] {
 		go func (entry deviceEntry, keyboard *Keyboard) {
 			var press bool
 			events := entry.Read()
+			entry.event = &events
+			L:
 			for {
 				select {
 				case <- keyboard.termSign:
-					return
+					break L
+				default:
+				}
+				select {
+				case <- keyboard.termSign:
+					break L
 				case e := <- events:
+					if e.String() == "" {
+						continue
+					}
 					if press = e.KeyPress(); press {
-						keyboard.OnPress <- KeyPress{Key{e.Code, e.String()}}
+						select {
+						case keyboard.OnPress <- KeyPress{Key{e.Code, e.String()}}:
+						default:
+						}
 					} else {
-						keyboard.OnRelease <- KeyRelease{Key{e.Code, e.String()}}
+						select {
+						case keyboard.OnRelease <- KeyRelease{Key{e.Code, e.String()}}:
+						default:
+						}
 					}
 				}
 			}
+			fmt.Println("stop keyboard")
 		}(entry, keyboard)
 	}
 }
@@ -192,10 +233,13 @@ func (keyboard *Keyboard) StopListen() {
 	if num = deviceNumMax; num > len(keyboard.entries) {
 		num = len(keyboard.entries)
 	}
+	// for _, entry := range keyboard.entries[0:num] {
+	// 	close(*entry.event)
+	// }
 	for i := 0; i < num; i++ {
 		keyboard.termSign <- true
 	}
-	<- time.After(1 * time.Second)
+	<- time.After(2 * time.Second)
 	close(keyboard.OnPress)
 	close(keyboard.OnRelease)
 }

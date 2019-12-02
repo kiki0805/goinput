@@ -102,7 +102,6 @@ type Keyboard struct {
 
 type deviceEntry struct {
 	fd    *os.File
-	event *chan inputEvent
 }
 
 // NewMouse return a mouse pointer.
@@ -244,7 +243,7 @@ func (mouse *Mouse) StopListen() {
 	for i := 0; i < num; i++ {
 		mouse.termSign <- true
 	}
-	<-time.After(1 * time.Second)
+	<-time.After(time.Second)
 	close(mouse.OnMove)
 	close(mouse.OnScroll)
 	close(mouse.OnClick)
@@ -261,9 +260,7 @@ func (keyboard *Keyboard) Listen() {
 	keyboard.termSign = make(chan bool, num)
 	for _, entry := range keyboard.entries[0:num] {
 		go func(entry deviceEntry, keyboard *Keyboard) {
-			var press bool
 			events := entry.Read()
-			entry.event = &events
 		L:
 			for {
 				select {
@@ -275,19 +272,14 @@ func (keyboard *Keyboard) Listen() {
 				case <-keyboard.termSign:
 					break L
 				case e := <-events:
-					if e.String() == "" {
+					if e.String() == "" || e.Type != evKey {
 						continue
 					}
-					if press = e.KeyPress(); press {
-						select {
-						case keyboard.OnPress <- KeyPress{Key{e.Code, e.String()}}:
-						default:
-						}
-					} else {
-						select {
-						case keyboard.OnRelease <- KeyRelease{Key{e.Code, e.String()}}:
-						default:
-						}
+					switch e.KeyPress() {
+					case true:
+						keyboard.OnPress <- KeyPress{Key{e.Code, e.String()}};
+					case false:
+						keyboard.OnRelease <- KeyRelease{Key{e.Code, e.String()}};
 					}
 				}
 			}
@@ -301,13 +293,10 @@ func (keyboard *Keyboard) StopListen() {
 	if num = deviceNumMax; num > len(keyboard.entries) {
 		num = len(keyboard.entries)
 	}
-	// for _, entry := range keyboard.entries[0:num] {
-	// 	close(*entry.event)
-	// }
 	for i := 0; i < num; i++ {
 		keyboard.termSign <- true
 	}
-	<-time.After(2 * time.Second)
+	<-time.After(time.Second)
 	close(keyboard.OnPress)
 	close(keyboard.OnRelease)
 }

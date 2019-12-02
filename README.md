@@ -1,6 +1,7 @@
 # goinput
 
 Capture mouse and keyboard events or control them on Linux
+![](example/goinput.gif)
 
 ## Notes
 * Only Linux based
